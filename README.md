@@ -1,23 +1,4 @@
-# MERN Stack Template
-
-<img src='https://raw.githubusercontent.com/BenElferink/mern-template/refs/heads/images/images/mern.jpeg' />
-
-- **M** = [MongoDB](https://www.mongodb.com)
-- **E** = [Express.js](https://expressjs.com)
-- **R** = [React.js](https://reactjs.org)
-- **N** = [Node.js](https://nodejs.org)
-
-<br />
-
-# What is this template?
-
-This template allows you to quick-start your Fullstack application using the MERN stack, it has a server setup with some basic authentication, and a client ready to communicate with the backend.
-
-<img src='https://raw.githubusercontent.com/BenElferink/mern-template/refs/heads/images/images/preview.png' />
-
-<br />
-
-# How to use this template
+# Recipe-Builder
 
 ### 1. Generate repository from template:
 
