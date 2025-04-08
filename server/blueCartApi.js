@@ -2,7 +2,7 @@
 const axios = require('axios');
 
 const BLUECART_API_KEY = process.env.BLUECART_API_KEY;
-const BASE_URL = 'https://api.bluecart.com/v1'; // Change this to the actual base URL for BlueCart's API
+const BASE_URL = 'https://api.bluecartapi.com'; 
 
 // Create an axios instance
 const api = axios.create({
@@ -16,19 +16,24 @@ const api = axios.create({
 // FUNCTIONS
 
 // Example of searching for a product by category. Can add more once figured stuff out
-async function getProductsByCategory(category) {
+const fetchProductData = async (searchTerm) => {
   try {
-    const response = await api.get('/products', {
-      params: { category: category }  // Filtering by category
+    const response = await axios.get('https://api.bluecartapi.com/request', {
+      params: {
+        api_key: process.env.BLUECART_API_KEY, // Ensure your API key is stored in .env
+        type: 'search',
+        search_term: searchTerm,
+        sort_by: 'best_seller',
+      },
     });
     return response.data;
   } catch (error) {
-    console.error('Error fetching products by category:', error);
+    console.error('Error fetching product data:', error);
     throw error;
   }
-}
+};
 
 
 module.exports = { // When adding new functions, names go here
-  getProducts,
+  fetchProductData,
 };
