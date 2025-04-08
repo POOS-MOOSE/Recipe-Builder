@@ -4,6 +4,8 @@ import AuthModal from 'components/AuthModal'
 import Header from 'components/Header'
 import logo from 'assets/react.svg'
 import 'styles/ReactWelcome.css'
+import 'bootstrap/dist/css/bootstrap.min.css'
+import { Container, Row } from 'react-bootstrap'
 
 const App = () => {
   return (
