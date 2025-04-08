@@ -30,14 +30,16 @@
     "@emotion/styled": "^11.14.0",
     "@mui/material": "^6.4.8",
     "axios": "^1.8.4",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "bootstrap": "^5.3.5",
+    "react": "^18.3.1",
+    "react-bootstrap": "^2.10.9",
+    "react-dom": "^18.3.1",
     "react-scripts": "5.0.1",
     "zustand": "^5.0.3"
   },
   "devDependencies": {
-    "@types/react": "^19.0.10",
-    "@types/react-dom": "^19.0.4",
+    "@types/react": "^18.3.20",
+    "@types/react-dom": "^18.3.6",
     "serve": "^14.2.4"
   }
 }
