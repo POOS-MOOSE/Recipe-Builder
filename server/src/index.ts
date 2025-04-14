@@ -5,6 +5,7 @@ import app from './utils/app' // (server)
 import mongo from './utils/mongo' // (database)
 import { PORT } from './constants/index'
 import authRoutes from './routes/auth'
+import recipeRoute from './routes/recipeRoute'
 
 const bootstrap = async () => {
   await mongo.connect()
@@ -19,6 +20,8 @@ const bootstrap = async () => {
 
   app.use('/auth', authRoutes)
   // add rest of routes here...
+  app.use('/api', recipeRoute)
+
 
   app.listen(PORT, () => {
     console.log(`✅ Server is listening on port: ${PORT}`)
