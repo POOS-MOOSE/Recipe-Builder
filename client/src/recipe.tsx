@@ -1,15 +1,23 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Nav, Modal, Button, Form, Card, Alert, Row, Col } from 'react-bootstrap'
+import { useAuth } from './contexts/AuthContext'
+import axios from './utils/axios'
 import 'bootstrap/dist/css/bootstrap.min.css'
 
 type Recipe = {
+  _id?: string;
   id: string;
   name: string;
   image: string | null;
   servingSize: number;
-  ingredients: string[];
+  ingredients: {
+    name: string;
+    quantity: string;
+    walmartProductId?: string;
+  }[];
   instructions: string;
   notes: string;
+  createdBy: string;
 };
 
 type MealPlan = {
@@ -21,6 +29,7 @@ type MealPlan = {
 type ViewType = 'recipe' | 'plan' | 'list' | 'recipe-detail' | 'plan-detail';
 
 const Recipe = () => {
+  const { token, isLoggedIn } = useAuth();
   const [activeView, setActiveView] = useState<ViewType>('recipe');
   const [showAddRecipeModal, setShowAddRecipeModal] = useState(false);
   const [showAddPlanModal, setShowAddPlanModal] = useState(false);
@@ -31,25 +40,71 @@ const Recipe = () => {
   const [currentPlan, setCurrentPlan] = useState<MealPlan | null>(null);
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
   const [newPlanTitle, setNewPlanTitle] = useState('');
-  const [newRecipe, setNewRecipe] = useState<Omit<Recipe, 'id'>>({
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [newRecipe, setNewRecipe] = useState<Omit<Recipe, 'id' | 'createdBy'>>({
     name: '',
     image: null,
     servingSize: 1,
-    ingredients: [],
+    ingredients: [] as { name: string; quantity: string; walmartProductId?: string }[], // This empty array needs to be properly typed
     instructions: '',
     notes: ''
   });
 
+  // Load user's recipes when component mounts
+  useEffect(() => {
+    const fetchRecipes = async () => {
+      if (!isLoggedIn || !token) {
+        return;
+      }
+      
+      setLoading(true);
+      setError(null);
+      
+      try {
+        const response = await axios.get('/api/recipes', {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        
+        if (response.data && response.data.data) {
+          // Map the backend recipes to our frontend format
+          const fetchedRecipes = response.data.data.map((recipe: any) => ({
+            id: recipe._id,
+            _id: recipe._id,
+            name: recipe.name,
+            image: null, // Backend doesn't store images yet
+            servingSize: 1, // Default value
+            ingredients: recipe.ingredients,
+            instructions: recipe.instructions,
+            notes: '',
+            createdBy: recipe.createdBy
+          }));
+          
+          setRecipes(fetchedRecipes);
+        }
+      } catch (err: any) {
+        console.error('Failed to fetch recipes:', err);
+        setError(err.response?.data?.message || 'Failed to load recipes');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchRecipes();
+  }, [isLoggedIn, token]);
+
   const handleAddIngredient = () => {
     setNewRecipe({
       ...newRecipe,
-      ingredients: [...newRecipe.ingredients, '']
+      ingredients: [...newRecipe.ingredients, { name: '', quantity: '', walmartProductId: undefined }]
     });
   };
 
-  const handleIngredientChange = (index: number, value: string) => {
+  const handleIngredientChange = (index: number, field: 'name' | 'quantity', value: string) => {
     const updatedIngredients = [...newRecipe.ingredients];
-    updatedIngredients[index] = value;
+    updatedIngredients[index][field] = value;
     setNewRecipe({
       ...newRecipe,
       ingredients: updatedIngredients
@@ -70,32 +125,75 @@ const Recipe = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const recipeToSave = {
-      ...newRecipe,
-      id: Date.now().toString()
-    };
     
-    if (editingRecipe) {
-      setRecipes(recipes.map(r => r.id === editingRecipe.id ? recipeToSave : r));
-    } else {
-      setRecipes([...recipes, recipeToSave]);
+    if (!isLoggedIn || !token) {
+      setError('You must be logged in to save recipes');
+      return;
     }
     
-    setShowAddRecipeModal(false);
-    setNewRecipe({
-      name: '',
-      image: null,
-      servingSize: 1,
-      ingredients: [],
-      instructions: '',
-      notes: ''
-    });
-    setEditingRecipe(null);
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Send recipe to backend
+      const response = await axios.post('/api/recipes', {
+        name: newRecipe.name,
+        ingredients: newRecipe.ingredients,
+        instructions: newRecipe.instructions
+      }, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      // Axios automatically throws errors for non-2xx responses,
+      // so if we get here, the request was successful
+      
+      // Get the saved recipe from the response
+      const savedRecipe = response.data.data;
+      
+      // Create a local recipe object with the data from the backend
+      const savedRecipeFormatted: Recipe = {
+        id: savedRecipe._id,
+        _id: savedRecipe._id,
+        name: savedRecipe.name,
+        image: newRecipe.image, // Keep local image since backend doesn't store it yet
+        servingSize: newRecipe.servingSize, // Keep servingSize since backend doesn't store it yet
+        ingredients: savedRecipe.ingredients,
+        instructions: savedRecipe.instructions,
+        notes: newRecipe.notes || '',
+        createdBy: savedRecipe.createdBy
+      };
+
+      // Update local state based on whether we're editing or creating
+      if (editingRecipe) {
+        setRecipes(recipes.map(r => r.id === editingRecipe.id ? savedRecipeFormatted : r));
+      } else {
+        setRecipes([...recipes, savedRecipeFormatted]);
+      }
+      
+      setShowAddRecipeModal(false);
+      setNewRecipe({
+        name: '',
+        image: null,
+        servingSize: 1,
+        ingredients: [] as { name: string; quantity: string; walmartProductId?: string }[], // This empty array needs to be properly typed
+        instructions: '',
+        notes: ''
+      });
+      setEditingRecipe(null);
+    } catch (err: any) {
+      console.error('Error saving recipe:', err);
+      setError(err.response?.data?.message || 'Failed to save recipe');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleEditRecipe = (recipe: Recipe) => {
+  const handleEditRecipe = async (recipe: Recipe) => {
+    // Set up edit form with existing recipe data
     setEditingRecipe(recipe);
     setNewRecipe({
       name: recipe.name,
@@ -109,12 +207,32 @@ const Recipe = () => {
     setShowAddRecipeModal(true);
   };
 
-  const handleDeleteRecipe = () => {
-    if (currentRecipe) {
+  const handleDeleteRecipe = async () => {
+    if (!currentRecipe || !currentRecipe._id || !token) {
+      setError('Cannot delete recipe. Missing recipe ID or authentication.');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      await axios.delete(`/api/recipes/${currentRecipe._id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      // Update local state after successful deletion
       setRecipes(recipes.filter(r => r.id !== currentRecipe.id));
       setActiveView('recipe');
       setCurrentRecipe(null);
       setShowDeleteConfirm(false);
+    } catch (err: any) {
+      console.error('Failed to delete recipe:', err);
+      setError(err.response?.data?.message || 'Failed to delete recipe');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -225,7 +343,7 @@ const Recipe = () => {
       <h4>Ingredients</h4>
       <ul>
         {recipe.ingredients.map((ingredient, index) => (
-          <li key={index}>{ingredient}</li>
+          <li key={index}>{ingredient.name} ({ingredient.quantity})</li>
         ))}
       </ul>
       <h4>Instructions</h4>
@@ -239,6 +357,10 @@ const Recipe = () => {
     </div>
   );
 
+
+  
+
+  
   return (
     <div className="container mt-4">
       <div className="mb-4">
@@ -270,19 +392,39 @@ const Recipe = () => {
               Add Recipe
             </Button>
           </div>
-          <Row xs={1} md={2} lg={3} className="g-4">
-            {recipes.map(recipe => (
-              <Col key={recipe.id}>
-                <RecipeCard 
-                  recipe={recipe}
-                  onClick={() => {
-                    setCurrentRecipe(recipe);
-                    setActiveView('recipe-detail');
-                  }}
-                />
-              </Col>
-            ))}
-          </Row>
+          
+          {error && (
+            <Alert variant="danger" dismissible onClose={() => setError(null)}>
+              {error}
+            </Alert>
+          )}
+          
+          {loading ? (
+            <div className="text-center py-5">
+              <div className="spinner-border text-primary" role="status">
+                <span className="visually-hidden">Loading...</span>
+              </div>
+              <p className="mt-3">Loading your recipes...</p>
+            </div>
+          ) : recipes.length === 0 ? (
+            <div className="text-center py-5">
+              <p className="text-muted">You don't have any recipes yet. Create your first recipe by clicking "Add Recipe".</p>
+            </div>
+          ) : (
+            <Row xs={1} md={2} lg={3} className="g-4">
+              {recipes.map(recipe => (
+                <Col key={recipe.id}>
+                  <RecipeCard 
+                    recipe={recipe}
+                    onClick={() => {
+                      setCurrentRecipe(recipe);
+                      setActiveView('recipe-detail');
+                    }}
+                  />
+                </Col>
+              ))}
+            </Row>
+          )}
         </div>
       )}
 
@@ -403,15 +545,30 @@ const Recipe = () => {
             <div className="mb-4 p-3 bg-light rounded">
               <h5 className="mb-3 fw-bold">Ingredients</h5>
               {newRecipe.ingredients.map((ingredient, index) => (
-                <Form.Control
-                  key={index}
-                  type="text"
-                  placeholder={`Ingredient ${index + 1}`}
-                  value={ingredient}
-                  onChange={(e) => handleIngredientChange(index, e.target.value)}
-                  className="mb-2 border-0 border-bottom rounded-0"
-                  required
-                />
+                <div key={index} className="mb-2">
+                  <Form.Group className="mb-2">
+                    <Form.Label className="small text-muted">Ingredient name</Form.Label>
+                    <Form.Control
+                      type="text"
+                      placeholder={`Ingredient ${index + 1} name`}
+                      value={ingredient.name}
+                      onChange={(e) => handleIngredientChange(index, 'name', e.target.value)}
+                      className="mb-2 border-0 border-bottom rounded-0"
+                      required
+                    />
+                  </Form.Group>
+                  <Form.Group>
+                    <Form.Label className="small text-muted">Quantity/amount</Form.Label>
+                    <Form.Control
+                      type="text"
+                      placeholder={`Quantity (e.g., 2 cups, 1 tbsp)`}
+                      value={ingredient.quantity}
+                      onChange={(e) => handleIngredientChange(index, 'quantity', e.target.value)}
+                      className="border-0 border-bottom rounded-0"
+                      required
+                    />
+                  </Form.Group>
+                </div>
               ))}
               <Button 
                 variant="outline-secondary" 

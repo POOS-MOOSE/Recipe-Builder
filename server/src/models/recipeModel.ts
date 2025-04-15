@@ -20,13 +20,13 @@ const recipeSchema = new Schema<IRecipe>({ // Structure seen in mongosh
   },
   ingredients: [
     {
-      name: {
+      name: { 
         type: String,
-        required: true,
+        required: [true, 'Ingredient name is required']
       },
       quantity: {
         type: String,
-        required: true,
+        required: [true, 'Quantity is required']
       },
       walmartProductId: {
         type: String,

@@ -14,7 +14,7 @@ const AuthModal: React.FC<Props> = () => {
   const isOpen = ['AUTH', 'LOGIN', 'REGISTER'].includes(currentModal)
   const onClose = () => setCurrentModal('')
 
-  const [formData, setFormData] = useState<FormData>({ username: '', email: '', password: '' })
+  const [formData, setFormData] = useState<FormData>({ username: '', password: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -37,7 +37,7 @@ const AuthModal: React.FC<Props> = () => {
     setLoading(false)
   }
 
-  const isSubmitButtonDisabled = !formData['username'] || !formData['email'] || !formData['password']
+  const isSubmitButtonDisabled = !formData['username'] || !formData['password']
 
   return (
     <Dialog open={isOpen} onClose={onClose}>
@@ -48,16 +48,6 @@ const AuthModal: React.FC<Props> = () => {
         name='username'
         type='text'
         value={formData['username']}
-        onChange={handleChange}
-        variant='filled'
-        sx={{ mx: 2, my: 0.5 }}
-        required
-      />
-       <TextField
-        label='Email'
-        name='email'
-        type='email'
-        value={formData['email']}
         onChange={handleChange}
         variant='filled'
         sx={{ mx: 2, my: 0.5 }}

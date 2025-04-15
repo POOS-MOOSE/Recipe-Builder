@@ -8,6 +8,7 @@ interface Props {}
 
 const Header: React.FC<Props> = () => {
   const { isLoggedIn, account, logout } = useAuth()
+  const navigate = useNavigate();
 
   const [anchorEl, setAnchorEl] = useState<(EventTarget & HTMLButtonElement) | null>(null)
   const [popover, setPopover] = useState(false)

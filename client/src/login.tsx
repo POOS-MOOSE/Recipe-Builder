@@ -1,22 +1,40 @@
 import React, { useState } from 'react'
-import { Button, Card, CardGroup, FloatingLabel, FormControl } from 'react-bootstrap'
+import { Button, Card, CardGroup, FloatingLabel, FormControl, Alert } from 'react-bootstrap'
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from './contexts/AuthContext';
 import 'bootstrap/dist/css/bootstrap.min.css'
 
 const Login = () => {
   const [checkLogin, setCheckLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { login, register } = useAuth();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Add your login logic here
-    // For now, we'll just simulate a successful login
-    if (username && password) {
-      // TODO: Add actual authentication logic here
-      // On successful login:
+    setError('');
+    setLoading(true);
+
+    try {
+      const formData = {
+        username,
+        password,
+      };
+
+      if (checkLogin) {
+        await login(formData);
+      } else {
+        await register(formData);
+      }
+      
       navigate('/recipe');
+    } catch (err: any) {
+      setError(err.toString());
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -70,25 +88,27 @@ const Login = () => {
                 >
                   {checkLogin ? 'Sign In' : 'New Account'}</Card.Header>
                 <Card.Body>
-                  <form onSubmit={handleLogin}>
+                  {error && <Alert variant="danger">{error}</Alert>}
+                  <form onSubmit={handleSubmit}>
                     <FloatingLabel
-                      controlId="floatingInput"
+                      controlId="floatingUsername"
                       label="Username"
-                      className="mb-3 mt-4"
+                      className="mb-3"
                     >
                       <FormControl
                         size="sm"
-                        type="username"
+                        type="text"
                         className="rounded-0"
                         placeholder='Username'
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
+                        required
                       />
                     </FloatingLabel>
                     <FloatingLabel
                       controlId="floatingPassword"
                       label="Password"
-                      className="mb-3 mt-4"
+                      className="mb-3"
                     >
                       <FormControl
                         size="sm"
@@ -97,19 +117,30 @@ const Login = () => {
                         placeholder='Password'
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
+                        required
                       />
                     </FloatingLabel>
                     <div className="d-flex justify-content-between p-0 mt-5">
                       <Button
                         size="sm"
                         variant="link"
-                        onClick={() => setCheckLogin(prev => !prev)}
+                        onClick={() => {
+                          setCheckLogin(prev => !prev);
+                          setError('');
+                        }}
                         type="button"
+                        disabled={loading}
                       >
                         {checkLogin ? "Don't have an account?" : "Back to login"}
                       </Button>
-                      <Button className="rounded-0" size="sm" variant="primary" type="submit">
-                        {checkLogin ? 'Login' : 'Register'}
+                      <Button 
+                        className="rounded-0" 
+                        size="sm" 
+                        variant="primary" 
+                        type="submit"
+                        disabled={loading}
+                      >
+                        {loading ? 'Processing...' : (checkLogin ? 'Login' : 'Register')}
                       </Button>
                     </div>
                   </form>
