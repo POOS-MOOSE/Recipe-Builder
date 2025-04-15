@@ -14,6 +14,9 @@ type Recipe = {
     name: string;
     quantity: string;
     walmartProductId?: string;
+    image?: string;
+    price?: number;
+    currency?: string;
   }[];
   instructions: string;
   notes: string;
@@ -22,6 +25,7 @@ type Recipe = {
 
 type MealPlan = {
   id: string;
+  _id?: string; // Add optional _id field for MongoDB ID
   title: string;
   recipes: Recipe[];
 };
@@ -34,6 +38,7 @@ const Recipe = () => {
   const [showAddRecipeModal, setShowAddRecipeModal] = useState(false);
   const [showAddPlanModal, setShowAddPlanModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeletePlanConfirm, setShowDeletePlanConfirm] = useState(false);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [plans, setPlans] = useState<MealPlan[]>([]);
   const [currentRecipe, setCurrentRecipe] = useState<Recipe | null>(null);
@@ -46,14 +51,23 @@ const Recipe = () => {
     name: '',
     image: null,
     servingSize: 1,
-    ingredients: [] as { name: string; quantity: string; walmartProductId?: string }[], // This empty array needs to be properly typed
+    ingredients: [] as { name: string; quantity: string; walmartProductId?: string; image?: string; price?: number; currency?: string }[], // This empty array needs to be properly typed
     instructions: '',
     notes: ''
   });
+  
+  // States for product search functionality
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
 
-  // Load user's recipes when component mounts
+  // States for recipe selection in meal plan
+  const [selectedRecipesForPlan, setSelectedRecipesForPlan] = useState<Recipe[]>([]);
+
+  // Load user's recipes and meal plans when component mounts
   useEffect(() => {
-    const fetchRecipes = async () => {
+    const fetchData = async () => {
       if (!isLoggedIn || !token) {
         return;
       }
@@ -62,15 +76,16 @@ const Recipe = () => {
       setError(null);
       
       try {
-        const response = await axios.get('/api/recipes', {
+        // Fetch recipes
+        const recipeResponse = await axios.get('/api/recipes', {
           headers: {
             Authorization: `Bearer ${token}`
           }
         });
         
-        if (response.data && response.data.data) {
+        if (recipeResponse.data && recipeResponse.data.data) {
           // Map the backend recipes to our frontend format
-          const fetchedRecipes = response.data.data.map((recipe: any) => ({
+          const fetchedRecipes = recipeResponse.data.data.map((recipe: any) => ({
             id: recipe._id,
             _id: recipe._id,
             name: recipe.name,
@@ -84,23 +99,50 @@ const Recipe = () => {
           
           setRecipes(fetchedRecipes);
         }
+        
+        // Fetch meal plans
+        const planResponse = await axios.get('/api/meal-plans', {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        
+        if (planResponse.data && planResponse.data.data) {
+          // Map the backend meal plans to our frontend format
+          const fetchedPlans = planResponse.data.data.map((plan: any) => {
+            // Each recipeId in the backend response is a populated recipe object
+            const planRecipes = plan.recipeIds.map((recipe: any) => ({
+              id: recipe._id,
+              _id: recipe._id,
+              name: recipe.name,
+              image: null,
+              servingSize: recipe.servingSize || 1,
+              ingredients: recipe.ingredients,
+              instructions: recipe.instructions,
+              notes: recipe.notes || '',
+              createdBy: recipe.createdBy
+            }));
+            
+            return {
+              id: plan._id,
+              _id: plan._id,
+              title: plan.title,
+              recipes: planRecipes
+            };
+          });
+          
+          setPlans(fetchedPlans);
+        }
       } catch (err: any) {
-        console.error('Failed to fetch recipes:', err);
-        setError(err.response?.data?.message || 'Failed to load recipes');
+        console.error('Failed to fetch data:', err);
+        setError(err.response?.data?.message || 'Failed to load data');
       } finally {
         setLoading(false);
       }
     };
     
-    fetchRecipes();
+    fetchData();
   }, [isLoggedIn, token]);
-
-  const handleAddIngredient = () => {
-    setNewRecipe({
-      ...newRecipe,
-      ingredients: [...newRecipe.ingredients, { name: '', quantity: '', walmartProductId: undefined }]
-    });
-  };
 
   const handleIngredientChange = (index: number, field: 'name' | 'quantity', value: string) => {
     const updatedIngredients = [...newRecipe.ingredients];
@@ -137,19 +179,47 @@ const Recipe = () => {
       setLoading(true);
       setError(null);
       
-      // Send recipe to backend
-      const response = await axios.post('/api/recipes', {
-        name: newRecipe.name,
-        ingredients: newRecipe.ingredients,
-        instructions: newRecipe.instructions
-      }, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+      // Sanitize ingredients data to remove _id fields and handle null values
+      const sanitizedIngredients = newRecipe.ingredients.map(ingredient => {
+        // Start with required fields
+        const sanitized: any = {
+          name: ingredient.name,
+          quantity: ingredient.quantity
+        };
+        
+        // Only add optional fields if they have valid values
+        if (ingredient.walmartProductId) sanitized.walmartProductId = ingredient.walmartProductId;
+        if (ingredient.image) sanitized.image = ingredient.image;
+        if (ingredient.price) sanitized.price = ingredient.price;
+        if (ingredient.currency) sanitized.currency = ingredient.currency;
+        
+        return sanitized;
       });
+      
+      // Only include fields that are allowed by the backend Joi validation
+      const recipeData = {
+        name: newRecipe.name,
+        ingredients: sanitizedIngredients,
+        instructions: newRecipe.instructions
+      };
 
-      // Axios automatically throws errors for non-2xx responses,
-      // so if we get here, the request was successful
+      let response;
+      
+      // If we're editing, use PUT to update the existing recipe
+      if (editingRecipe && editingRecipe._id) {
+        response = await axios.put(`/api/recipes/${editingRecipe._id}`, recipeData, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+      } else {
+        // Otherwise, create a new recipe with POST
+        response = await axios.post('/api/recipes', recipeData, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+      }
       
       // Get the saved recipe from the response
       const savedRecipe = response.data.data;
@@ -179,7 +249,7 @@ const Recipe = () => {
         name: '',
         image: null,
         servingSize: 1,
-        ingredients: [] as { name: string; quantity: string; walmartProductId?: string }[], // This empty array needs to be properly typed
+        ingredients: [] as { name: string; quantity: string; walmartProductId?: string; image?: string; price?: number; currency?: string }[], // This empty array needs to be properly typed
         instructions: '',
         notes: ''
       });
@@ -236,28 +306,97 @@ const Recipe = () => {
     }
   };
 
-  const handleCreatePlan = () => {
-    if (newPlanTitle.trim()) {
-      const newPlan = {
-        id: Date.now().toString(),
-        title: newPlanTitle,
-        recipes: []
-      };
-      setPlans([...plans, newPlan]);
-      setNewPlanTitle('');
-      setShowAddPlanModal(false);
+  const handleCreatePlan = async () => {
+    if (newPlanTitle.trim() && selectedRecipesForPlan.length > 0) {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Extract recipe IDs for sending to the backend
+        const recipeIds = selectedRecipesForPlan.map(recipe => recipe._id);
+        
+        // Save the meal plan to the backend
+        const response = await axios.post('/api/meal-plans', {
+          title: newPlanTitle,
+          recipeIds: recipeIds
+        }, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        if (response.data && response.data.data) {
+          // Format the saved meal plan for frontend use
+          const savedPlan = response.data.data;
+          const formattedPlan: MealPlan = {
+            id: savedPlan._id,
+            _id: savedPlan._id,
+            title: savedPlan.title,
+            recipes: selectedRecipesForPlan // Use the already-loaded recipe objects
+          };
+          
+          // Update local state
+          setPlans([...plans, formattedPlan]);
+          setNewPlanTitle('');
+          setSelectedRecipesForPlan([]);
+          setShowAddPlanModal(false);
+        }
+      } catch (err: any) {
+        console.error('Error saving meal plan:', err);
+        setError(err.response?.data?.message || 'Failed to save meal plan');
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
-  const handleRemoveRecipeFromPlan = (recipeId: string) => {
-    if (currentPlan) {
-      const updatedPlan = {
-        ...currentPlan,
-        recipes: currentPlan.recipes.filter(r => r.id !== recipeId)
-      };
-      setPlans(plans.map(p => p.id === currentPlan.id ? updatedPlan : p));
-      setCurrentPlan(updatedPlan);
+  const handleSelectRecipeForPlan = (recipe: Recipe) => {
+    // Check if recipe is already selected
+    if (selectedRecipesForPlan.some(r => r.id === recipe.id)) {
+      // If already selected, remove it
+      setSelectedRecipesForPlan(selectedRecipesForPlan.filter(r => r.id !== recipe.id));
+    } else {
+      // If not selected, add it
+      setSelectedRecipesForPlan([...selectedRecipesForPlan, recipe]);
     }
+  };
+
+  const handleRemoveIngredient = (indexToRemove: number) => {
+    setNewRecipe({
+      ...newRecipe,
+      ingredients: newRecipe.ingredients.filter((_, index) => index !== indexToRemove)
+    });
+  };
+
+  const handleQuantityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value);
+    if (!isNaN(value) && value > 0) {
+      setNewRecipe({ ...newRecipe, servingSize: value });
+    }
+  };
+
+  const calculateTotalPrice = (ingredients: Recipe['ingredients']): number => {
+    return ingredients.reduce((total, ingredient) => {
+      if (!ingredient.price) return total;
+      
+      // Try to extract numeric quantity from string like "2 cups" or "1.5 tbsp"
+      let quantityNum = 1;
+      const quantityMatch = ingredient.quantity.match(/^(\d*\.?\d+)/);
+      if (quantityMatch && quantityMatch[1]) {
+        quantityNum = parseFloat(quantityMatch[1]);
+      }
+      
+      return total + (ingredient.price * quantityNum);
+    }, 0);
+  };
+
+  const handleIngredientQuantityChange = (index: number, value: string) => {
+    const updatedIngredients = [...newRecipe.ingredients];
+    updatedIngredients[index].quantity = value;
+    setNewRecipe({
+      ...newRecipe,
+      ingredients: updatedIngredients
+    });
   };
 
   const RecipeCard = ({ recipe, onClick }: { recipe: Recipe; onClick: () => void }) => (
@@ -271,9 +410,21 @@ const Recipe = () => {
       )}
       <Card.Body>
         <Card.Title>{recipe.name}</Card.Title>
-        <Card.Text className="text-muted">
-          Serves: {recipe.servingSize}
-        </Card.Text>
+        <div>
+          <Card.Text className="mb-1">
+            <small className="text-muted">
+              {recipe.ingredients.length} ingredients • Serves {recipe.servingSize}
+            </small>
+          </Card.Text>
+          {recipe.ingredients.some(i => i.price) && (
+            <div className="mt-2 d-flex align-items-center">
+              <span className="badge bg-success me-1">
+                ${calculateTotalPrice(recipe.ingredients).toFixed(2)}
+              </span>
+              <small className="text-muted">total cost</small>
+            </div>
+          )}
+        </div>
       </Card.Body>
     </Card>
   );
@@ -282,22 +433,22 @@ const Recipe = () => {
     <Card className="mb-3 h-100" onClick={onClick} style={{ cursor: 'pointer' }}>
       <Card.Body>
         <Card.Title>{plan.title}</Card.Title>
-        <Card.Text className="text-muted">
-          {plan.recipes.length} {plan.recipes.length === 1 ? 'recipe' : 'recipes'}
-        </Card.Text>
-        {plan.recipes.length > 0 && (
-          <div className="mt-2">
-            <h6 className="text-muted">Includes:</h6>
-            <ul className="list-unstyled">
-              {plan.recipes.slice(0, 3).map(recipe => (
-                <li key={recipe.id}>{recipe.name}</li>
-              ))}
-              {plan.recipes.length > 3 && (
-                <li>...and {plan.recipes.length - 3} more</li>
-              )}
-            </ul>
-          </div>
-        )}
+        <div>
+          <Card.Text className="mb-1">
+            <small className="text-muted">
+              {plan.recipes.length} {plan.recipes.length === 1 ? 'recipe' : 'recipes'}
+            </small>
+          </Card.Text>
+          
+          {plan.recipes.some(recipe => recipe.ingredients.some(i => i.price)) && (
+            <div className="mt-2 d-flex align-items-center">
+              <span className="badge bg-success me-1">
+                ${calculateShoppingListTotal(generateShoppingList(plan)).toFixed(2)}
+              </span>
+              <small className="text-muted">total cost</small>
+            </div>
+          )}
+        </div>
       </Card.Body>
     </Card>
   );
@@ -340,12 +491,37 @@ const Recipe = () => {
       )}
       <h4>Serving Size</h4>
       <p>{recipe.servingSize}</p>
-      <h4>Ingredients</h4>
-      <ul>
+      
+      <div className="d-flex justify-content-between align-items-center mb-2">
+        <h4 className="mb-0">Ingredients</h4>
+        {recipe.ingredients.some(i => i.price) && (
+          <div className="badge bg-success p-2">
+            Total Cost: ${calculateTotalPrice(recipe.ingredients).toFixed(2)} USD
+          </div>
+        )}
+      </div>
+      
+      <div className="mb-4">
         {recipe.ingredients.map((ingredient, index) => (
-          <li key={index}>{ingredient.name} ({ingredient.quantity})</li>
+          <div key={index} className="d-flex align-items-center mb-2 p-2 border-bottom">
+            {ingredient.image && (
+              <img 
+                src={ingredient.image} 
+                alt={ingredient.name} 
+                style={{ width: '40px', height: '40px', objectFit: 'contain', marginRight: '10px' }}
+              />
+            )}
+            <div className="flex-grow-1">
+              <div className="fw-bold">{ingredient.name} <span className="fw-normal">({ingredient.quantity})</span></div>
+              {ingredient.price && (
+                <div className="small text-muted">
+                  ${ingredient.price} {ingredient.currency || 'USD'}
+                </div>
+              )}
+            </div>
+          </div>
         ))}
-      </ul>
+      </div>
       <h4>Instructions</h4>
       <p style={{ whiteSpace: 'pre-wrap' }}>{recipe.instructions}</p>
       {recipe.notes && (
@@ -357,10 +533,184 @@ const Recipe = () => {
     </div>
   );
 
-
+  // Function to search for products
+  const searchProducts = async () => {
+    if (!searchTerm.trim() || !token) {
+      return;
+    }
+    
+    try {
+      setSearching(true);
+      setError(null);
+      
+      // Call the product search endpoint we added to the backend
+      const response = await axios.get(`/api/products/search?term=${encodeURIComponent(searchTerm)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      if (response.data && response.data.data && response.data.data.products) {
+        setSearchResults(response.data.data.products);
+        setShowSearchResults(true);
+      } else {
+        setSearchResults([]);
+        setError('No products found');
+      }
+    } catch (err: any) {
+      console.error('Error searching products:', err);
+      setError(err.response?.data?.message || 'Failed to search for products');
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  };
   
+  // Function to add a product as an ingredient
+  const addProductAsIngredient = (product: any) => {
+    // Add the selected product as an ingredient with all details
+    setNewRecipe({
+      ...newRecipe,
+      ingredients: [
+        ...newRecipe.ingredients, 
+        { 
+          name: product.name,
+          quantity: '1', // Default quantity
+          walmartProductId: product.id,
+          image: product.image || null,
+          price: product.price || null,
+          currency: product.currency || 'USD'
+        }
+      ]
+    });
+    
+    // Clear search results
+    setShowSearchResults(false);
+  };
 
-  
+  // Function to generate shopping list from a meal plan
+  const generateShoppingList = (plan: MealPlan) => {
+    // Create a map to store consolidated ingredients
+    const ingredientMap = new Map<string, {
+      name: string;
+      totalQuantity: string;
+      price?: number;
+      currency?: string;
+      image?: string;
+      recipes: string[]; // Track which recipes use this ingredient
+    }>();
+    
+    // Process each recipe in the plan
+    plan.recipes.forEach(recipe => {
+      recipe.ingredients.forEach(ingredient => {
+        const ingredientKey = ingredient.name.toLowerCase().trim();
+        
+        // Extract numeric quantity if possible
+        let quantityNum = 1;
+        const quantityMatch = ingredient.quantity.match(/^(\d*\.?\d+)/);
+        if (quantityMatch && quantityMatch[1]) {
+          quantityNum = parseFloat(quantityMatch[1]);
+        }
+        
+        // Extract unit if present (e.g., "cups" from "2 cups")
+        let unit = '';
+        const unitMatch = ingredient.quantity.match(/\d+\s+([a-zA-Z]+)/);
+        if (unitMatch && unitMatch[1]) {
+          unit = unitMatch[1];
+        }
+        
+        if (ingredientMap.has(ingredientKey)) {
+          // Ingredient already in map, update quantities
+          const existing = ingredientMap.get(ingredientKey)!;
+          
+          // Try to combine quantities if they have the same unit
+          let newQuantity = existing.totalQuantity;
+          
+          // If we can extract numbers from both, add them
+          const existingQuantityMatch = existing.totalQuantity.match(/^(\d*\.?\d+)/);
+          if (existingQuantityMatch && existingQuantityMatch[1] && unitMatch) {
+            const existingQuantityNum = parseFloat(existingQuantityMatch[1]);
+            newQuantity = `${existingQuantityNum + quantityNum} ${unit}`;
+          } else {
+            // If units don't match or can't be parsed, just list both
+            newQuantity = `${existing.totalQuantity} + ${ingredient.quantity}`;
+          }
+          
+          // Update the map
+          ingredientMap.set(ingredientKey, {
+            ...existing,
+            totalQuantity: newQuantity,
+            recipes: [...existing.recipes, recipe.name]
+          });
+        } else {
+          // New ingredient, add to map
+          ingredientMap.set(ingredientKey, {
+            name: ingredient.name,
+            totalQuantity: ingredient.quantity,
+            price: ingredient.price,
+            currency: ingredient.currency,
+            image: ingredient.image,
+            recipes: [recipe.name]
+          });
+        }
+      });
+    });
+    
+    // Convert map to array for easier rendering
+    return Array.from(ingredientMap.values());
+  };
+
+  // Function to handle viewing a meal plan
+  const handleViewPlan = (plan: MealPlan) => {
+    setCurrentPlan(plan);
+    setActiveView('plan-detail');
+  };
+
+  // Function to calculate total cost of a shopping list
+  const calculateShoppingListTotal = (shoppingList: ReturnType<typeof generateShoppingList>) => {
+    return shoppingList.reduce((total, item) => {
+      if (!item.price) return total;
+      
+      // Try to extract numeric quantity
+      let quantityNum = 1;
+      const quantityMatch = item.totalQuantity.match(/^(\d*\.?\d+)/);
+      if (quantityMatch && quantityMatch[1]) {
+        quantityNum = parseFloat(quantityMatch[1]);
+      }
+      
+      return total + (item.price * quantityNum);
+    }, 0);
+  };
+
+  const handleDeleteMealPlan = async () => {
+    if (!currentPlan || !currentPlan._id || !token) {
+      setError('Cannot delete meal plan. Missing plan ID or authentication.');
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      await axios.delete(`/api/meal-plans/${currentPlan._id}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      
+      // Update local state
+      setPlans(plans.filter(p => p.id !== currentPlan.id));
+      setCurrentPlan(null);
+      setActiveView('plan');
+      setShowDeletePlanConfirm(false);
+    } catch (err: any) {
+      console.error('Error deleting meal plan:', err);
+      setError(err.response?.data?.message || 'Failed to delete meal plan');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="container mt-4">
       <div className="mb-4">
@@ -450,10 +800,7 @@ const Recipe = () => {
               <Col key={plan.id}>
                 <PlanCard 
                   plan={plan}
-                  onClick={() => {
-                    setCurrentPlan(plan);
-                    setActiveView('plan-detail');
-                  }}
+                  onClick={() => handleViewPlan(plan)}
                 />
               </Col>
             ))}
@@ -463,48 +810,78 @@ const Recipe = () => {
 
       {activeView === 'plan-detail' && currentPlan && (
         <div>
-          <Button variant="link" onClick={() => setActiveView('plan')}>&larr; Back to Plans</Button>
+          <Button variant="link" onClick={() => setActiveView('plan')}>&larr; Back to Meal Plans</Button>
           <div className="d-flex justify-content-between align-items-start mb-4">
             <h2>{currentPlan.title}</h2>
             <div>
-              <Button variant="outline-primary" className="me-2">
+              <Button variant="outline-primary" className="me-2" onClick={() => handleViewPlan(currentPlan)}>
                 Edit
               </Button>
-              <Button variant="outline-danger">
+              <Button variant="outline-danger" onClick={() => setShowDeletePlanConfirm(true)}>
                 Delete
               </Button>
             </div>
           </div>
-          <h4>Recipes in this plan</h4>
-          <Row xs={1} md={2} lg={3} className="g-4">
-            {currentPlan.recipes.map(recipe => (
-              <Col key={recipe.id}>
-                <Card>
-                  {recipe.image && (
-                    <Card.Img 
-                      variant="top" 
-                      src={recipe.image} 
-                      style={{ height: '150px', objectFit: 'cover' }}
-                    />
-                  )}
-                  <Card.Body>
-                    <Card.Title>{recipe.name}</Card.Title>
-                    <Card.Text>Serves: {recipe.servingSize}</Card.Text>
-                    <Button 
-                      variant="outline-danger" 
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemoveRecipeFromPlan(recipe.id);
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  </Card.Body>
-                </Card>
-              </Col>
-            ))}
-          </Row>
+          
+          <div className="row">
+            <div className="col-md-6">
+              <h4 className="mb-3">Recipes in this Plan</h4>
+              {currentPlan.recipes.map(recipe => (
+                <div key={recipe.id} className="card mb-3">
+                  <div className="card-body">
+                    <div className="d-flex justify-content-between align-items-center">
+                      <h5 className="card-title mb-0">{recipe.name}</h5>
+                      <span className="badge bg-primary">Serves {recipe.servingSize}</span>
+                    </div>
+                    <p className="card-text small text-muted mt-2">{recipe.ingredients.length} ingredients</p>
+                    {recipe.ingredients.some(i => i.price) && (
+                      <div className="small d-flex align-items-center mt-1">
+                        <span className="badge bg-success me-1">
+                          ${calculateTotalPrice(recipe.ingredients).toFixed(2)}
+                        </span>
+                        <span className="text-muted">recipe cost</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="col-md-6">
+              <div className="card mb-4">
+                <div className="card-header d-flex justify-content-between align-items-center bg-light">
+                  <h4 className="mb-0">Shopping List</h4>
+                  <span className="badge bg-success p-2 fs-6">
+                    Total: ${calculateShoppingListTotal(generateShoppingList(currentPlan)).toFixed(2)} USD
+                  </span>
+                </div>
+                <div className="card-body" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                  {generateShoppingList(currentPlan).map(ingredient => (
+                    <div key={ingredient.name} className="d-flex align-items-center mb-3 p-2 border-bottom">
+                      {ingredient.image && (
+                        <img 
+                          src={ingredient.image} 
+                          alt={ingredient.name} 
+                          style={{ width: '40px', height: '40px', objectFit: 'contain', marginRight: '10px' }}
+                        />
+                      )}
+                      <div className="flex-grow-1">
+                        <div className="fw-bold">{ingredient.name} <span className="fw-normal">({ingredient.totalQuantity})</span></div>
+                        {ingredient.price && (
+                          <div className="small text-muted">
+                            ${ingredient.price} {ingredient.currency || 'USD'} per unit
+                          </div>
+                        )}
+                        <div className="small text-muted">
+                          Used in: {ingredient.recipes.join(', ')}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -540,44 +917,153 @@ const Recipe = () => {
                   className="border-0 border-bottom rounded-0"
                 />
               </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>Serving Size</Form.Label>
+                <Form.Control 
+                  type="number" 
+                  min="1"
+                  placeholder="Number of servings"
+                  value={newRecipe.servingSize}
+                  onChange={handleQuantityChange}
+                  className="border-0 border-bottom rounded-0"
+                  required
+                />
+              </Form.Group>
             </div>
 
             <div className="mb-4 p-3 bg-light rounded">
               <h5 className="mb-3 fw-bold">Ingredients</h5>
-              {newRecipe.ingredients.map((ingredient, index) => (
-                <div key={index} className="mb-2">
-                  <Form.Group className="mb-2">
-                    <Form.Label className="small text-muted">Ingredient name</Form.Label>
-                    <Form.Control
-                      type="text"
-                      placeholder={`Ingredient ${index + 1} name`}
-                      value={ingredient.name}
-                      onChange={(e) => handleIngredientChange(index, 'name', e.target.value)}
-                      className="mb-2 border-0 border-bottom rounded-0"
-                      required
-                    />
-                  </Form.Group>
-                  <Form.Group>
-                    <Form.Label className="small text-muted">Quantity/amount</Form.Label>
-                    <Form.Control
-                      type="text"
-                      placeholder={`Quantity (e.g., 2 cups, 1 tbsp)`}
-                      value={ingredient.quantity}
-                      onChange={(e) => handleIngredientChange(index, 'quantity', e.target.value)}
-                      className="border-0 border-bottom rounded-0"
-                      required
-                    />
-                  </Form.Group>
+              <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                {newRecipe.ingredients.map((ingredient, index) => (
+                  <div key={index} className="d-flex align-items-center mb-2 p-2 border-bottom position-relative">
+                    <Button 
+                      variant="link" 
+                      className="position-absolute text-danger" 
+                      style={{ top: 0, right: 0, padding: '0', fontSize: '1.2rem' }}
+                      onClick={() => handleRemoveIngredient(index)}
+                    >
+                      &times;
+                    </Button>
+                    
+                    {ingredient.image && (
+                      <img 
+                        src={ingredient.image} 
+                        alt={ingredient.name} 
+                        style={{ width: '40px', height: '40px', objectFit: 'contain', marginRight: '10px' }}
+                      />
+                    )}
+                    
+                    <div className="flex-grow-1">
+                      <div className="d-flex justify-content-between align-items-center">
+                        <Form.Group style={{ flex: 2, marginRight: '10px' }}>
+                          <Form.Label className="small text-muted">Name</Form.Label>
+                          <Form.Control
+                            type="text"
+                            placeholder="Ingredient name"
+                            value={ingredient.name}
+                            onChange={(e) => handleIngredientChange(index, 'name', e.target.value)}
+                            className="border-0 border-bottom rounded-0"
+                            required
+                          />
+                        </Form.Group>
+                        
+                        <Form.Group style={{ width: '80px' }}>
+                          <Form.Label className="small text-muted">Quantity</Form.Label>
+                          <Form.Control
+                            type="text"
+                            placeholder="Qty"
+                            value={ingredient.quantity}
+                            onChange={(e) => handleIngredientQuantityChange(index, e.target.value)}
+                            className="border-0 border-bottom rounded-0"
+                            required
+                          />
+                        </Form.Group>
+                      </div>
+                      
+                      {ingredient.price && (
+                        <div className="small text-muted mt-1">
+                          ${ingredient.price} {ingredient.currency || 'USD'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {newRecipe.ingredients.length > 0 && (
+                <div className="mt-3 mb-2 p-2 bg-light rounded">
+                  <div className="d-flex justify-content-between align-items-center">
+                    <span className="fw-bold">Total Estimated Cost:</span>
+                    <span className="fw-bold text-success">${calculateTotalPrice(newRecipe.ingredients).toFixed(2)} USD</span>
+                  </div>
+                  <div className="small text-muted">
+                    Based on ingredient quantities and prices
+                  </div>
                 </div>
-              ))}
+              )}
+              <Form.Group className="mb-3">
+                <Form.Label>Search for products</Form.Label>
+                <Form.Control 
+                  type="text" 
+                  placeholder="Search for products"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="border-0 border-bottom rounded-0"
+                />
+              </Form.Group>
               <Button 
-                variant="outline-secondary" 
+                variant="outline-primary" 
                 size="sm" 
-                onClick={handleAddIngredient}
+                onClick={searchProducts}
                 className="mt-2"
+                disabled={searching}
               >
-                + Add Ingredient
+                {searching ? 'Searching...' : 'Search'}
               </Button>
+              {searching && (
+                <div className="text-center my-3">
+                  <div className="spinner-border spinner-border-sm text-primary" role="status">
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                  <span className="ms-2">Searching for products...</span>
+                </div>
+              )}
+              {showSearchResults && searchResults.length > 0 && (
+                <div className="mt-3 p-3 border rounded">
+                  <h6 className="mb-3">Product Search Results:</h6>
+                  <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    {searchResults.map((product, index) => (
+                      <div key={index} className="d-flex align-items-center mb-2 p-2 border-bottom">
+                        {product.image && (
+                          <img 
+                            src={product.image} 
+                            alt={product.name} 
+                            style={{ width: '40px', height: '40px', objectFit: 'contain', marginRight: '10px' }}
+                          />
+                        )}
+                        <div className="flex-grow-1">
+                          <div className="fw-bold">{product.name}</div>
+                          <div className="small text-muted">
+                            {product.price && `$${product.price} ${product.currency || 'USD'}`}
+                          </div>
+                        </div>
+                        <Button 
+                          variant="outline-success" 
+                          size="sm"
+                          onClick={() => addProductAsIngredient(product)}
+                        >
+                          Add
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {showSearchResults && searchResults.length === 0 && !searching && (
+                <div className="alert alert-info mt-3">
+                  No products found matching your search. Try different keywords.
+                </div>
+              )}
             </div>
 
             <div className="mb-4 p-3 bg-light rounded">
@@ -639,6 +1125,33 @@ const Recipe = () => {
               required
             />
           </Form.Group>
+          <h5 className="mb-3 fw-bold">Select Recipes for Plan</h5>
+          <Row xs={1} md={2} lg={3} className="g-4">
+            {recipes.map(recipe => (
+              <Col key={recipe.id}>
+                <Card>
+                  {recipe.image && (
+                    <Card.Img 
+                      variant="top" 
+                      src={recipe.image} 
+                      style={{ height: '150px', objectFit: 'cover' }}
+                    />
+                  )}
+                  <Card.Body>
+                    <Card.Title>{recipe.name}</Card.Title>
+                    <Card.Text>Serves: {recipe.servingSize}</Card.Text>
+                    <Button 
+                      variant={selectedRecipesForPlan.some(r => r.id === recipe.id) ? 'outline-success' : 'outline-primary'} 
+                      size="sm"
+                      onClick={() => handleSelectRecipeForPlan(recipe)}
+                    >
+                      {selectedRecipesForPlan.some(r => r.id === recipe.id) ? 'Selected' : 'Select'}
+                    </Button>
+                  </Card.Body>
+                </Card>
+              </Col>
+            ))}
+          </Row>
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowAddPlanModal(false)}>
@@ -666,6 +1179,26 @@ const Recipe = () => {
           </Button>
           <Button variant="danger" onClick={handleDeleteRecipe}>
             Delete Recipe
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showDeletePlanConfirm} onHide={() => setShowDeletePlanConfirm(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Confirm Delete</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Alert variant="danger">
+            Are you sure you want to delete "{currentPlan?.title}"?
+          </Alert>
+          <p>This action cannot be undone.</p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowDeletePlanConfirm(false)}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={handleDeleteMealPlan}>
+            Delete Meal Plan
           </Button>
         </Modal.Footer>
       </Modal>
