@@ -1,14 +1,13 @@
-import React, { Fragment, type MouseEventHandler, useState } from 'react'
-import { useModalStore } from 'store/useModalStore'
+import React, { type MouseEventHandler, useState } from 'react'
 import { useAuth } from 'contexts/AuthContext'
 import OnlineIndicator from 'components/OnlineIndicator'
 import { AppBar, IconButton, Avatar, Popover, List, ListSubheader, ListItemButton } from '@mui/material'
+import { useNavigate } from 'react-router-dom';
 
 interface Props {}
 
 const Header: React.FC<Props> = () => {
   const { isLoggedIn, account, logout } = useAuth()
-  const { setCurrentModal } = useModalStore()
 
   const [anchorEl, setAnchorEl] = useState<(EventTarget & HTMLButtonElement) | null>(null)
   const [popover, setPopover] = useState(false)
@@ -23,19 +22,16 @@ const Header: React.FC<Props> = () => {
     setAnchorEl(null)
   }
 
-  const clickLogin = () => {
-    setCurrentModal('LOGIN')
-    closePopover()
-  }
+  const handleLogout = () => {
 
-  const clickRegister = () => {
-    setCurrentModal('REGISTER')
-    closePopover()
+    logout()
+    navigate('/login');
+    closePopover();
   }
 
   return (
     <AppBar className='header' position='static'>
-      <h1>Meal Planner</h1>
+      <h1 style={{ fontSize: '1.5rem' }}>Meal Planner</h1>
 
       <IconButton onClick={openPopover}>
         <OnlineIndicator online={isLoggedIn}>
@@ -53,14 +49,7 @@ const Header: React.FC<Props> = () => {
         <List style={{ minWidth: '100px' }}>
           <ListSubheader style={{ textAlign: 'center' }}>Hello, {account?.username || 'Guest'}</ListSubheader>
 
-          {isLoggedIn ? (
-            <ListItemButton onClick={logout}>Logout</ListItemButton>
-          ) : (
-            <Fragment>
-              <ListItemButton onClick={clickLogin}>Login</ListItemButton>
-              <ListItemButton onClick={clickRegister}>Register</ListItemButton>
-            </Fragment>
-          )}
+          <ListItemButton onClick={handleLogout}>Logout</ListItemButton>
         </List>
       </Popover>
     </AppBar>
