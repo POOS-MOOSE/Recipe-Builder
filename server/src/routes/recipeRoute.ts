@@ -6,6 +6,7 @@ import {
   updateRecipe,
   deleteRecipe
 } from '../controllers/recipe/recipeControl';
+import { searchProductsHandler } from '../controllers/recipe/productSearch';
 import checkBearerToken from '../middlewares/check-bearer-token';
 import errorHandler from '../middlewares/error-handler';
 
@@ -25,5 +26,8 @@ router.put('/recipes/:id', [checkBearerToken], updateRecipe, errorHandler);
 
 // DELETE recipe (with authentication)
 router.delete('/recipes/:id', [checkBearerToken], deleteRecipe, errorHandler);
+
+// GET product search (with authentication)
+router.get('/products/search', [checkBearerToken], searchProductsHandler, errorHandler);
 
 export default router;

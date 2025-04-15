@@ -24,7 +24,10 @@ const saveRecipe: RequestHandler = async (req, res, next) => {
           joi.instance.object({
             name: joi.instance.string().required(),
             quantity: joi.instance.string().required(),
-            walmartProductId: joi.instance.string().optional()
+            walmartProductId: joi.instance.string().optional(),
+            image: joi.instance.string().optional(),
+            price: joi.instance.number().optional(),
+            currency: joi.instance.string().optional()
           })
         ).required(),
         instructions: joi.instance.string().required()
@@ -173,7 +176,10 @@ const updateRecipe: RequestHandler = async (req, res, next) => {
           joi.instance.object({
             name: joi.instance.string().required(),
             quantity: joi.instance.string().required(),
-            walmartProductId: joi.instance.string().optional()
+            walmartProductId: joi.instance.string().optional(),
+            image: joi.instance.string().optional(),
+            price: joi.instance.number().optional(),
+            currency: joi.instance.string().optional()
           })
         ).required(),
         instructions: joi.instance.string().required()

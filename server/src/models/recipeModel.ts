@@ -7,6 +7,9 @@ interface IRecipe extends Document {
     name: string;
     quantity: string;
     walmartProductId?: string; // Optional
+    image?: string; // Added for ingredient image URL
+    price?: number; // Added for ingredient price
+    currency?: string; // Added for currency type
   }[];
   instructions: string;
   createdBy: string;
@@ -30,7 +33,19 @@ const recipeSchema = new Schema<IRecipe>({ // Structure seen in mongosh
       },
       walmartProductId: {
         type: String,
-        required: false, // Optional
+        required: false
+      },
+      image: {
+        type: String,
+        required: false
+      },
+      price: {
+        type: Number,
+        required: false
+      },
+      currency: {
+        type: String,
+        required: false
       }
     }
   ],
