@@ -19,7 +19,7 @@ const bootstrap = async () => {
     res.status(204).end()
   })
 
-  app.use('/auth', authRoutes)
+  app.use('/api/auth', authRoutes)
   // add rest of routes here...
   app.use('/api', recipeRoute)
   app.use('/api', mealPlanRoute)

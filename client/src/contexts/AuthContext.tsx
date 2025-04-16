@@ -36,7 +36,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
   const register = (formData: FormData) => {
     return new Promise((resolve, reject) => {
       axios
-        .post('/auth/register', formData)
+        .post('/api/auth/register', formData)
         .then(({ data: { data: accountData, token: accessToken } }) => {
           setAccount(accountData)
           setToken(accessToken)
@@ -52,7 +52,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
   const login = (formData: FormData) => {
     return new Promise((resolve, reject) => {
       axios
-        .post('/auth/login', formData)
+        .post('/api/auth/login', formData)
         .then(({ data: { data: accountData, token: accessToken } }) => {
           setAccount(accountData)
           setToken(accessToken)
@@ -75,7 +75,7 @@ export const AuthProvider = ({ children }: PropsWithChildren) => {
     try {
       const {
         data: { data: accountData, token: accessToken },
-      } = await axios.get('/auth/login', {
+      } = await axios.get('/api/auth/login', {
         headers: {
           authorization: `Bearer ${token}`,
         },
