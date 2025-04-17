@@ -3,6 +3,7 @@ import { useAuth } from 'contexts/AuthContext'
 import OnlineIndicator from 'components/OnlineIndicator'
 import { AppBar, IconButton, Avatar, Popover, List, ListSubheader, ListItemButton } from '@mui/material'
 import { useNavigate } from 'react-router-dom';
+import 'bootstrap/dist/css/bootstrap.min.css';
 
 interface Props {}
 
@@ -34,7 +35,7 @@ const Header: React.FC<Props> = () => {
     <AppBar className='header' position='static'>
       <h1 style={{ fontSize: '1.5rem' }}>Meal Planner</h1>
 
-      <IconButton onClick={openPopover}>
+      <IconButton style={{paddingBottom:'1rem'}} onClick={openPopover}>
         <OnlineIndicator online={isLoggedIn}>
           <Avatar src={account?.username || ''} alt={account?.username || 'Guest'} />
         </OnlineIndicator>
