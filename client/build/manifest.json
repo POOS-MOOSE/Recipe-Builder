@@ -1,7 +1,7 @@
 {
-  "name": "Web Application",
-  "short_name": "Web App",
-  "description": "An awesome web application!",
+  "name": "Recipe Builder",
+  "short_name": "Recipes",
+  "description": "Create, manage, and store your favorite recipes",
   "icons": [
     {
       "src": "favicon.ico",
@@ -24,7 +24,7 @@
   "theme_color": "#000000",
   "background_color": "#ffffff",
   "developer": {
-    "name": "",
-    "url": ""
+    "name": "Recipe Builder Team",
+    "url": "https://recipebuilder.app"
   }
 }
