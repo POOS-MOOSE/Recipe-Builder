@@ -6,7 +6,7 @@ const isProd = NODE_ENV === 'production'
 
 // Configure CORS settings based on environment
 const ORIGIN = isProd 
-  ? 'http://server.fullybaked.me' // Production domain
+  ? 'https://server.fullybaked.me' // Production domain
   : '*' // Allow all origins in development
 
 const PORT = process.env.PORT || 8080
@@ -24,7 +24,7 @@ const MONGO_OPTIONS = {
 const JWT_SECRET = process.env.JWT_SECRET || 'unsafe_secret'
 
 const BASE_URL = isProd
-  ? 'http://server.fullybaked.me' // Production domain
+  ? 'https://server.fullybaked.me' // Production domain
   : `http://localhost:${PORT}` // Development URL
 
 export { 
