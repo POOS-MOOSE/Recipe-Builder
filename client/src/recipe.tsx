@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Nav, Modal, Button, Form, Card, Alert, Row, Col } from 'react-bootstrap'
 import { useAuth } from './contexts/AuthContext'
+import { useNavigate } from 'react-router-dom'
 import axios from './utils/axios'
 import 'bootstrap/dist/css/bootstrap.min.css'
 
@@ -35,6 +36,14 @@ type ViewType = 'recipe' | 'plan' | 'list' | 'recipe-detail' | 'plan-detail';
 
 const Recipe = () => {
   const { token, isLoggedIn } = useAuth();
+  const navigate = useNavigate();
+  
+  // Check if user is logged in, if not redirect to login page
+  useEffect(() => {
+    if (!isLoggedIn) {
+      navigate('/login');
+    }
+  }, [isLoggedIn, navigate]);
   const [activeView, setActiveView] = useState<ViewType>('recipe');
   const [showAddRecipeModal, setShowAddRecipeModal] = useState(false);
   const [showAddPlanModal, setShowAddPlanModal] = useState(false);
