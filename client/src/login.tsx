@@ -26,11 +26,11 @@ const Login = () => {
 
       if (checkLogin) {
         await login(formData);
+        navigate('/recipe');
       } else {
         await register(formData);
+        window.location.reload();
       }
-      
-      navigate('/recipe');
     } catch (err: any) {
       setError(err.toString());
     } finally {
