@@ -3,6 +3,7 @@ import { type Document, model, Schema } from 'mongoose'
 // Define the recipe schema
 interface IRecipe extends Document {
   name: string;
+  imageId?: string; // UUID reference to the saved image file
   ingredients: {
     name: string;
     quantity: string;
@@ -20,6 +21,10 @@ const recipeSchema = new Schema<IRecipe>({ // Structure seen in mongosh
   name: {
     type: String,
     required: true,
+  },
+  imageId: {
+    type: String,
+    required: false
   },
   ingredients: [
     {

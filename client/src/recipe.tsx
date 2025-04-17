@@ -44,6 +44,7 @@ const Recipe = () => {
   const [currentRecipe, setCurrentRecipe] = useState<Recipe | null>(null);
   const [currentPlan, setCurrentPlan] = useState<MealPlan | null>(null);
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
+  const [editingMealPlan, setEditingMealPlan] = useState<MealPlan | null>(null);
   const [newPlanTitle, setNewPlanTitle] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -306,7 +307,7 @@ const Recipe = () => {
     }
   };
 
-  const handleCreatePlan = async () => {
+  const handleSavePlan = async () => {
     if (newPlanTitle.trim() && selectedRecipesForPlan.length > 0) {
       try {
         setLoading(true);
@@ -315,15 +316,29 @@ const Recipe = () => {
         // Extract recipe IDs for sending to the backend
         const recipeIds = selectedRecipesForPlan.map(recipe => recipe._id);
         
-        // Save the meal plan to the backend
-        const response = await axios.post('/api/meal-plans', {
-          title: newPlanTitle,
-          recipeIds: recipeIds
-        }, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
+        let response;
+        
+        // If we're editing, update the existing plan
+        if (editingMealPlan && editingMealPlan._id) {
+          response = await axios.put(`/api/meal-plans/${editingMealPlan._id}`, {
+            title: newPlanTitle,
+            recipeIds: recipeIds
+          }, {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+        } else {
+          // Otherwise create a new plan
+          response = await axios.post('/api/meal-plans', {
+            title: newPlanTitle,
+            recipeIds: recipeIds
+          }, {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+        }
 
         if (response.data && response.data.data) {
           // Format the saved meal plan for frontend use
@@ -336,9 +351,22 @@ const Recipe = () => {
           };
           
           // Update local state
-          setPlans([...plans, formattedPlan]);
+          if (editingMealPlan) {
+            // Replace the updated plan in the array
+            setPlans(plans.map(p => p.id === editingMealPlan.id ? formattedPlan : p));
+            // If we were viewing this plan when we edited it, update the current plan view
+            if (currentPlan && currentPlan.id === editingMealPlan.id) {
+              setCurrentPlan(formattedPlan);
+            }
+          } else {
+            // Add the new plan to the array
+            setPlans([...plans, formattedPlan]);
+          }
+          
+          // Reset form state
           setNewPlanTitle('');
           setSelectedRecipesForPlan([]);
+          setEditingMealPlan(null);
           setShowAddPlanModal(false);
         }
       } catch (err: any) {
@@ -665,6 +693,14 @@ const Recipe = () => {
     setCurrentPlan(plan);
     setActiveView('plan-detail');
   };
+  
+  // Function to handle editing a meal plan
+  const handleEditMealPlan = (plan: MealPlan) => {
+    setEditingMealPlan(plan);
+    setNewPlanTitle(plan.title);
+    setSelectedRecipesForPlan(plan.recipes);
+    setShowAddPlanModal(true);
+  };
 
   // Function to calculate total cost of a shopping list
   const calculateShoppingListTotal = (shoppingList: ReturnType<typeof generateShoppingList>) => {
@@ -814,7 +850,7 @@ const Recipe = () => {
           <div className="d-flex justify-content-between align-items-start mb-4">
             <h2>{currentPlan.title}</h2>
             <div>
-              <Button variant="outline-primary" className="me-2" onClick={() => handleViewPlan(currentPlan)}>
+              <Button variant="outline-primary" className="me-2" onClick={() => handleEditMealPlan(currentPlan)}>
                 Edit
               </Button>
               <Button variant="outline-danger" onClick={() => setShowDeletePlanConfirm(true)}>
@@ -1110,59 +1146,6 @@ const Recipe = () => {
         </Modal.Body>
       </Modal>
 
-      <Modal show={showAddPlanModal} onHide={() => setShowAddPlanModal(false)}>
-        <Modal.Header closeButton>
-          <Modal.Title>Create New Meal Plan</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <Form.Group className="mb-3">
-            <Form.Label>Plan Title</Form.Label>
-            <Form.Control 
-              type="text" 
-              placeholder="e.g., 'Weekly Dinner Plan'"
-              value={newPlanTitle}
-              onChange={(e) => setNewPlanTitle(e.target.value)}
-              required
-            />
-          </Form.Group>
-          <h5 className="mb-3 fw-bold">Select Recipes for Plan</h5>
-          <Row xs={1} md={2} lg={3} className="g-4">
-            {recipes.map(recipe => (
-              <Col key={recipe.id}>
-                <Card>
-                  {recipe.image && (
-                    <Card.Img 
-                      variant="top" 
-                      src={recipe.image} 
-                      style={{ height: '150px', objectFit: 'cover' }}
-                    />
-                  )}
-                  <Card.Body>
-                    <Card.Title>{recipe.name}</Card.Title>
-                    <Card.Text>Serves: {recipe.servingSize}</Card.Text>
-                    <Button 
-                      variant={selectedRecipesForPlan.some(r => r.id === recipe.id) ? 'outline-success' : 'outline-primary'} 
-                      size="sm"
-                      onClick={() => handleSelectRecipeForPlan(recipe)}
-                    >
-                      {selectedRecipesForPlan.some(r => r.id === recipe.id) ? 'Selected' : 'Select'}
-                    </Button>
-                  </Card.Body>
-                </Card>
-              </Col>
-            ))}
-          </Row>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowAddPlanModal(false)}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={handleCreatePlan}>
-            Create Plan
-          </Button>
-        </Modal.Footer>
-      </Modal>
-
       <Modal show={showDeleteConfirm} onHide={() => setShowDeleteConfirm(false)}>
         <Modal.Header closeButton>
           <Modal.Title>Confirm Delete</Modal.Title>
@@ -1183,6 +1166,83 @@ const Recipe = () => {
         </Modal.Footer>
       </Modal>
 
+      <Modal show={showAddPlanModal} onHide={() => {
+        setShowAddPlanModal(false);
+        setEditingMealPlan(null);
+        setNewPlanTitle('');
+        setSelectedRecipesForPlan([]);
+      }} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>{editingMealPlan ? 'Edit Meal Plan' : 'Create New Meal Plan'}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form.Group className="mb-3">
+            <Form.Label>Plan Title</Form.Label>
+            <Form.Control
+              type="text"
+              placeholder="Enter a name for your meal plan"
+              value={newPlanTitle}
+              onChange={(e) => setNewPlanTitle(e.target.value)}
+              required
+            />
+          </Form.Group>
+          
+          <div className="mb-3">
+            <label>Select Recipes for this Plan</label>
+            <div className="d-flex flex-wrap">
+              {recipes.map(recipe => (
+                <div key={recipe.id} className="m-1">
+                  <Button
+                    variant={selectedRecipesForPlan.some(r => r.id === recipe.id) ? "primary" : "outline-primary"}
+                    size="sm"
+                    onClick={() => handleSelectRecipeForPlan(recipe)}
+                  >
+                    {recipe.name}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+          
+          {selectedRecipesForPlan.length > 0 && (
+            <div className="mb-3">
+              <h5 className="mb-2">Selected Recipes:</h5>
+              <div className="border p-3 rounded">
+                {selectedRecipesForPlan.map(recipe => (
+                  <div key={recipe.id} className="mb-2 d-flex justify-content-between align-items-center">
+                    <span>{recipe.name}</span>
+                    <Button
+                      variant="link"
+                      className="text-danger"
+                      onClick={() => handleSelectRecipeForPlan(recipe)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => {
+            setShowAddPlanModal(false);
+            setEditingMealPlan(null);
+            setNewPlanTitle('');
+            setSelectedRecipesForPlan([]);
+          }}>
+            Cancel
+          </Button>
+          <Button 
+            variant="primary" 
+            onClick={handleSavePlan}
+            disabled={!newPlanTitle.trim() || selectedRecipesForPlan.length === 0}
+          >
+            {editingMealPlan ? 'Save Changes' : 'Create Meal Plan'}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+      
       <Modal show={showDeletePlanConfirm} onHide={() => setShowDeletePlanConfirm(false)}>
         <Modal.Header closeButton>
           <Modal.Title>Confirm Delete</Modal.Title>
