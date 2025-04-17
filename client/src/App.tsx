@@ -10,9 +10,10 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 const AppContent = () => {
   const location = useLocation();
   const showHeader = location.pathname !== '/login';
+  const pageClass = location.pathname === '/recipe' ? 'App recipe-page' : 'App';
 
   return (
-    <div className='App'>
+    <div className={pageClass}>
       {showHeader && <Header />}
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />

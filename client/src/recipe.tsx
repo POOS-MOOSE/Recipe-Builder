@@ -499,12 +499,12 @@ const Recipe = () => {
   };
 
   const RecipeCard = ({ recipe, onClick }: { recipe: Recipe; onClick: () => void }) => (
-    <Card className="mb-3 h-100" onClick={onClick} style={{ cursor: 'pointer' }}>
+    <Card className="mb-3 h-100" onClick={onClick} style={{ cursor: 'pointer'  }}>
       {recipe.image && (
         <Card.Img 
           variant="top" 
           src={recipe.image} 
-          style={{ height: '200px', objectFit: 'cover' }}
+          style={{ height: '200px', objectFit: 'cover'}}
         />
       )}
       <Card.Body>
@@ -820,6 +820,7 @@ const Recipe = () => {
 
   return (
     <div className="container mt-4">
+      <Card style={{padding: '1rem', width: '100%'}}>
       <div className="mb-4">
         <Nav variant="tabs">
           <Nav.Item>
@@ -868,6 +869,7 @@ const Recipe = () => {
               <p className="text-muted">You don't have any recipes yet. Create your first recipe by clicking "Add Recipe".</p>
             </div>
           ) : (
+            // <Card style={{padding: '2rem'}}>
             <Row xs={1} md={2} lg={3} className="g-4">
               {recipes.map(recipe => (
                 <Col key={recipe.id}>
@@ -913,6 +915,7 @@ const Recipe = () => {
             ))}
           </Row>
         </div>
+        
       )}
 
       {activeView === 'plan-detail' && currentPlan && (
@@ -1334,7 +1337,9 @@ const Recipe = () => {
           </Button>
         </Modal.Footer>
       </Modal>
+      </Card>
     </div>
+    
   );
 };
 
