@@ -60,7 +60,7 @@ const Login = () => {
           >
             <Card.Img
               variant="top"
-              src={'/imgs/Matthew-Gerber790edit-scaled.jpg'}
+              src={'/imgs/poos-moose.png'}
               alt="logo"
               className="w-50 object-fit-cover rounded-0"
               style={{
