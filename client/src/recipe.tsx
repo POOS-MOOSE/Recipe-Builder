@@ -9,6 +9,7 @@ type Recipe = {
   id: string;
   name: string;
   image: string | null;
+  imageId?: string; // Added to store the image ID from the backend
   servingSize: number;
   ingredients: {
     name: string;
@@ -48,6 +49,11 @@ const Recipe = () => {
   const [newPlanTitle, setNewPlanTitle] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Reference to the image file input element
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  // State to track if we have a new image file to upload
+  const [imageFile, setImageFile] = useState<File | null>(null);
+
   const [newRecipe, setNewRecipe] = useState<Omit<Recipe, 'id' | 'createdBy'>>({
     name: '',
     image: null,
@@ -65,6 +71,14 @@ const Recipe = () => {
 
   // States for recipe selection in meal plan
   const [selectedRecipesForPlan, setSelectedRecipesForPlan] = useState<Recipe[]>([]);
+
+  // Helper function to get image URL from an imageId
+  const getImageUrl = (imageId?: string) => {
+    if (!imageId) return null;
+    // Use the BACKEND_URL constant to create a full URL with our specific image content path
+    // Make sure to include the /api/ prefix since all routes are registered under /api/
+    return `${axios.defaults.baseURL}/api/image-content/${imageId}`;
+  };
 
   // Load user's recipes and meal plans when component mounts
   useEffect(() => {
@@ -90,7 +104,8 @@ const Recipe = () => {
             id: recipe._id,
             _id: recipe._id,
             name: recipe.name,
-            image: null, // Backend doesn't store images yet
+            imageId: recipe.imageId,
+            image: recipe.imageId ? getImageUrl(recipe.imageId) : null,
             servingSize: 1, // Default value
             ingredients: recipe.ingredients,
             instructions: recipe.instructions,
@@ -157,6 +172,10 @@ const Recipe = () => {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      // Store the file for later upload
+      setImageFile(file);
+      
+      // Also show preview in the UI
       const reader = new FileReader();
       reader.onloadend = () => {
         setNewRecipe({
@@ -201,25 +220,61 @@ const Recipe = () => {
       const recipeData = {
         name: newRecipe.name,
         ingredients: sanitizedIngredients,
-        instructions: newRecipe.instructions
+        instructions: newRecipe.instructions,
+        // Include imageId if it exists (for keeping the same image during edits)
+        ...(editingRecipe?.imageId && !imageFile ? { imageId: editingRecipe.imageId } : {})
       };
 
       let response;
+
+      // Determine if we need to use the image upload endpoint
+      const hasNewImage = !!imageFile;
       
-      // If we're editing, use PUT to update the existing recipe
-      if (editingRecipe && editingRecipe._id) {
-        response = await axios.put(`/api/recipes/${editingRecipe._id}`, recipeData, {
+      if (hasNewImage) {
+        // If we have a new image, use FormData to send both recipe data and image
+        const formData = new FormData();
+        
+        // Add the recipe data as a JSON string
+        formData.append('recipe', JSON.stringify(recipeData));
+        
+        // Add the image file
+        formData.append('image', imageFile);
+        
+        // Determine the correct endpoint based on whether we're creating or editing
+        const endpoint = editingRecipe && editingRecipe._id
+          ? `/api/recipes/${editingRecipe._id}/with-image`
+          : '/api/recipes/with-image';
+        
+        // Use the correct HTTP method
+        const method = editingRecipe && editingRecipe._id ? 'put' : 'post';
+        
+        // Make the request
+        response = await axios({
+          method,
+          url: endpoint,
+          data: formData,
           headers: {
+            'Content-Type': 'multipart/form-data',
             Authorization: `Bearer ${token}`
           }
         });
       } else {
-        // Otherwise, create a new recipe with POST
-        response = await axios.post('/api/recipes', recipeData, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
+        // If no new image, use the regular JSON endpoints
+        if (editingRecipe && editingRecipe._id) {
+          // Update existing recipe
+          response = await axios.put(`/api/recipes/${editingRecipe._id}`, recipeData, {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+        } else {
+          // Create new recipe
+          response = await axios.post('/api/recipes', recipeData, {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+        }
       }
       
       // Get the saved recipe from the response
@@ -230,7 +285,9 @@ const Recipe = () => {
         id: savedRecipe._id,
         _id: savedRecipe._id,
         name: savedRecipe.name,
-        image: newRecipe.image, // Keep local image since backend doesn't store it yet
+        imageId: savedRecipe.imageId, // Store the image ID returned from the backend
+        // If we have a new uploaded image, use the local preview, otherwise construct URL from imageId
+        image: newRecipe.image || (savedRecipe.imageId ? getImageUrl(savedRecipe.imageId) : null),
         servingSize: newRecipe.servingSize, // Keep servingSize since backend doesn't store it yet
         ingredients: savedRecipe.ingredients,
         instructions: savedRecipe.instructions,
@@ -254,6 +311,11 @@ const Recipe = () => {
         instructions: '',
         notes: ''
       });
+      // Reset the image file state and file input
+      setImageFile(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       setEditingRecipe(null);
     } catch (err: any) {
       console.error('Error saving recipe:', err);
@@ -951,6 +1013,7 @@ const Recipe = () => {
                   accept="image/*"
                   onChange={handleImageUpload}
                   className="border-0 border-bottom rounded-0"
+                  ref={fileInputRef}
                 />
               </Form.Group>
 
